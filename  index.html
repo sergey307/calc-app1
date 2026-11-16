@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2b7a78">
+<meta name="description" content="Калькулятор калорий и БЖУ с офлайн-работой">
+<title>Калькулятор калорий и БЖУ</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --text: #1a1a1a; --muted: #6b7280;
+    --accent: #2b7a78; --accent-hover: #236361;
+    --protein: #e05d5d; --fat: #e0a33e; --carbs: #4a8fd4;
+    --border: #e5e7eb;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text);
+    padding: max(16px, env(safe-area-inset-top)) 16px calc(32px + env(safe-area-inset-bottom));
+    min-height: 100vh;
+  }
+  .container { max-width: 520px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 20px; }
+  .card {
+    background: var(--card); border-radius: 12px; padding: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06); margin-bottom: 16px;
+  }
+  label { display: block; margin: 12px 0 4px; font-weight: 600; font-size: 14px; }
+  label:first-child { margin-top: 0; }
+  input, select {
+    width: 100%; padding: 10px 12px; font-size: 16px;
+    border: 1px solid var(--border); border-radius: 8px; background: #fff;
+  }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .row { display: flex; gap: 12px; }
+  .row > div { flex: 1; }
+  button {
+    width: 100%; padding: 14px; margin-top: 20px;
+    background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    font-size: 16px; font-weight: 600; cursor: pointer; transition: background .15s;
+  }
+  button:hover { background: var(--accent-hover); }
+  button:active { transform: translateY(1px); }
+  .ghost {
+    background: transparent; color: var(--accent);
+    border: 1px solid var(--accent); margin-top: 10px;
+  }
+  .ghost:hover { background: rgba(43,122,120,.08); }
+  .hidden { display: none; }
+  .error { color: #c00; font-size: 14px; margin-top: 12px; }
+
+  .result-kcal { text-align: center; margin-bottom: 4px; }
+  .result-kcal .num { font-size: 40px; font-weight: 700; color: var(--accent); }
+  .result-kcal .lbl { color: var(--muted); font-size: 14px; }
+  .sub { text-align: center; color: var(--muted); font-size: 14px; margin-bottom: 20px; }
+
+  .bar {
+    display: flex; height: 16px; border-radius: 8px; overflow: hidden;
+    margin: 20px 0 14px;
+  }
+  .bar > div { transition: width .4s ease; }
+  .bar .p { background: var(--protein); }
+  .bar .f { background: var(--fat); }
+  .bar .c { background: var(--carbs); }
+
+  .macro-list { display: grid; gap: 10px; }
+  .macro {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 12px; border-radius: 8px; background: #f9fafb;
+  }
+  .macro .left { display: flex; align-items: center; gap: 10px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+  .dot.p { background: var(--protein); }
+  .dot.f { background: var(--fat); }
+  .dot.c { background: var(--carbs); }
+  .macro .name { font-weight: 600; font-size: 14px; }
+  .macro .pct { color: var(--muted); font-size: 12px; }
+  .macro .grams { font-weight: 700; font-size: 15px; }
+
+  .note {
+    font-size: 12px; color: var(--muted); line-height: 1.5;
+    margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border);
+  }
+  #copyBtn { margin-top: 16px; }
+
+  #installBanner {
+    background: #e8f4f3; border: 1px solid var(--accent);
+    border-radius: 12px; padding: 14px 16px; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  #installBanner.hidden { display: none; }
+  #installBanner p { margin: 0; font-size: 14px; flex: 1; }
+  #installBanner button {
+    width: auto; margin: 0; padding: 8px 14px; font-size: 14px;
+  }
+  #installBanner .close {
+    background: transparent; color: var(--muted); border: none;
+    padding: 4px 8px; font-size: 20px; cursor: pointer; width: auto;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div id="installBanner" class="hidden">
+    <p>Установить приложение на главный экран?</p>
+    <button onclick="installApp()">Установить</button>
+    <button class="close" onclick="hideBanner()">×</button>
+  </div>
+
+  <h1>Калькулятор калорий и БЖУ</h1>
+
+  <div class="card">
+    <label>Пол</label>
+    <select id="sex">
+      <option value="m">Мужской</option>
+      <option value="f">Женский</option>
+    </select>
+
+    <div class="row">
+      <div>
+        <label>Вес, кг</label>
+        <input id="weight" type="number" inputmode="decimal" placeholder="70">
+      </div>
+      <div>
+        <label>Рост, см</label>
+        <input id="height" type="number" inputmode="numeric" placeholder="175">
+      </div>
+      <div>
+        <label>Возраст</label>
+        <input id="age" type="number" inputmode="numeric" placeholder="30">
+      </div>
+    </div>
+
+    <label>Активность</label>
+    <select id="activity">
+      <option value="1.2">Сидячий образ жизни</option>
+      <option value="1.375">Лёгкая (1–3 тренировки/нед)</option>
+      <option value="1.55" selected>Средняя (3–5 тренировок)</option>
+      <option value="1.725">Высокая (6–7 тренировок)</option>
+      <option value="1.9">Очень высокая (физ. работа + спорт)</option>
+    </select>
+
+    <label>Цель</label>
+    <select id="goal">
+      <option value="0.8">Похудение (−20%)</option>
+      <option value="1" selected>Поддержание</option>
+      <option value="1.15">Набор (+15%)</option>
+    </select>
+
+    <button onclick="calc()">Рассчитать</button>
+    <div id="error" class="error hidden"></div>
+  </div>
+
+  <div id="resultCard" class="card hidden">
+    <div class="result-kcal">
+      <div class="num" id="kcalNum">0</div>
+      <div class="lbl">ккал в день</div>
+    </div>
+    <div class="sub" id="subInfo"></div>
+
+    <div class="bar" id="bar">
+      <div class="p" style="width:0"></div>
+      <div class="f" style="width:0"></div>
+      <div class="c" style="width:0"></div>
+    </div>
+
+    <div class="macro-list">
+      <div class="macro">
+        <div class="left">
+          <span class="dot p"></span>
+          <div>
+            <div class="name">Белки</div>
+            <div class="pct" id="pPct"></div>
+          </div>
+        </div>
+        <div class="grams" id="pGrams"></div>
+      </div>
+      <div class="macro">
+        <div class="left">
+          <span class="dot f"></span>
+          <div>
+            <div class="name">Жиры</div>
+            <div class="pct" id="fPct"></div>
+          </div>
+        </div>
+        <div class="grams" id="fGrams"></div>
+      </div>
+      <div class="macro">
+        <div class="left">
+          <span class="dot c"></span>
+          <div>
+            <div class="name">Углеводы</div>
+            <div class="pct" id="cPct"></div>
+          </div>
+        </div>
+        <div class="grams" id="cGrams"></div>
+      </div>
+    </div>
+
+    <button id="copyBtn" class="ghost" onclick="copyResult()">Скопировать результат</button>
+
+    <div class="note">
+      Расчёт носит информационный характер и не заменяет консультацию врача или диетолога.
+      Данные сохраняются только в вашем браузере.
+    </div>
+  </div>
+</div>
+
+<script>
+const FIELDS = ['sex','weight','height','age','activity','goal'];
+const STORAGE_KEY = 'kcal_calc_v1';
+let lastResult = null;
+
+function saveInputs() {
+  const data = {};
+  FIELDS.forEach(id => data[id] = document.getElementById(id).value);
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
+}
+function loadInputs() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    FIELDS.forEach(id => {
+      if (data[id] != null) document.getElementById(id).value = data[id];
+    });
+  } catch {}
+}
+
+function calculate({sex, weight, height, age, activity, goal}) {
+  const bmr = 10*weight + 6.25*height - 5*age + (sex === 'm' ? 5 : -161);
+  const tdee = bmr * activity;
+  const target = tdee * goal;
+
+  let proteinPerKg = 1.8;
+  if (goal < 1) proteinPerKg = 2.0;
+  else if (goal > 1) proteinPerKg = 1.8;
+
+  const protein = Math.round(weight * proteinPerKg);
+  const fat = Math.round(weight * 0.9);
+  const proteinKcal = protein * 4;
+  const fatKcal = fat * 9;
+  const carbsKcal = Math.max(target - proteinKcal - fatKcal, 0);
+  const carbs = Math.round(carbsKcal / 4);
+
+  const totalKcal = proteinKcal + fatKcal + carbs * 4 || 1;
+  const pPct = Math.round(proteinKcal / totalKcal * 100);
+  const fPct = Math.round(fatKcal / totalKcal * 100);
+  const cPct = 100 - pPct - fPct;
+
+  return {
+    bmr: Math.round(bmr),
+    tdee: Math.round(tdee),
+    target: Math.round(target),
+    protein, fat, carbs, pPct, fPct, cPct
+  };
+}
+
+function validate(w, h, a) {
+  if (!w || !h || !a) return 'Заполните все поля.';
+  if (w < 30 || w > 300) return 'Вес должен быть от 30 до 300 кг.';
+  if (h < 100 || h > 250) return 'Рост должен быть от 100 до 250 см.';
+  if (a < 14 || a > 100) return 'Возраст должен быть от 14 до 100 лет.';
+  return null;
+}
+
+function calc() {
+  const sex = document.getElementById('sex').value;
+  const weight = +document.getElementById('weight').value;
+  const height = +document.getElementById('height').value;
+  const age = +document.getElementById('age').value;
+  const activity = +document.getElementById('activity').value;
+  const goal = +document.getElementById('goal').value;
+
+  const err = document.getElementById('error');
+  const problem = validate(weight, height, age);
+  if (problem) {
+    err.textContent = problem;
+    err.classList.remove('hidden');
+    document.getElementById('resultCard').classList.add('hidden');
+    return;
+  }
+  err.classList.add('hidden');
+
+  const r = calculate({sex, weight, height, age, activity, goal});
+  lastResult = r;
+  saveInputs();
+  render(r);
+}
+
+function render(r) {
+  document.getElementById('kcalNum').textContent = r.target;
+  document.getElementById('subInfo').textContent =
+    `Базовый обмен: ${r.bmr} ккал · Поддержание: ${r.tdee} ккал`;
+
+  document.getElementById('pPct').textContent = `${r.pPct}% · ${r.protein * 4} ккал`;
+  document.getElementById('fPct').textContent = `${r.fPct}% · ${r.fat * 9} ккал`;
+  document.getElementById('cPct').textContent = `${r.cPct}% · ${r.carbs * 4} ккал`;
+
+  document.getElementById('pGrams').textContent = `${r.protein} г`;
+  document.getElementById('fGrams').textContent = `${r.fat} г`;
+  document.getElementById('cGrams').textContent = `${r.carbs} г`;
+
+  const bar = document.getElementById('bar');
+  bar.children[0].style.width = r.pPct + '%';
+  bar.children[1].style.width = r.fPct + '%';
+  bar.children[2].style.width = r.cPct + '%';
+
+  document.getElementById('resultCard').classList.remove('hidden');
+}
+
+async function copyResult() {
+  if (!lastResult) return;
+  const r = lastResult;
+  const text =
+    `Калории: ${r.target} ккал/день\n` +
+    `Белки: ${r.protein} г (${r.pPct}%)\n` +
+    `Жиры: ${r.fat} г (${r.fPct}%)\n` +
+    `Углеводы: ${r.carbs} г (${r.cPct}%)\n` +
+    `BMR: ${r.bmr} ккал · TDEE: ${r.tdee} ккал`;
+  const btn = document.getElementById('copyBtn');
+  try {
+    await navigator.clipboard.writeText(text);
+    btn.textContent = 'Скопировано ✓';
+  } catch {
+    btn.textContent = 'Не удалось скопировать';
+  }
+  setTimeout(() => btn.textContent = 'Скопировать результат', 1800);
+}
+
+// ---------- Установка PWA ----------
+let deferredPrompt = null;
+const banner = document.getElementById('installBanner');
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  if (!localStorage.getItem('installDismissed')) {
+    banner.classList.remove('hidden');
+  }
+});
+
+async function installApp() {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  const { outcome } = await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  banner.classList.add('hidden');
+}
+
+function hideBanner() {
+  banner.classList.add('hidden');
+  localStorage.setItem('installDismissed', '1');
+}
+
+// ---------- Инициализация ----------
+loadInputs();
+FIELDS.forEach(id => {
+  document.getElementById(id).addEventListener('change', () => {
+    if (lastResult || document.getElementById('weight').value) calc();
+  });
+});
+
+// Регистрация Service Worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(err => console.log('SW error:', err));
+  });
+}
+</script>
+</body>
+</html>
